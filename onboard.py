@@ -139,11 +139,13 @@ if __name__ == "__main__":
 
                 elif messageType == Message_ID.Origin_Correction:
                     UAV.origin_correction(info)
-                    xbee.send_data_async(gcs_address, data.pack_info_packet(f"origin changed -> {info}"))   
+                    xbee.send_data_async(gcs_address, data.pack_info_packet(f"origin changed => {info}"))   
 
                 elif messageType == Message_ID.Waypoints:
                     method = info[0]
                     xbee.send_data_async(gcs_address, data.pack_info_packet(f"received Waypoints command"))
+                    if not UAV.mode == Mode.GUIDED.name:
+                        success = UAV.set_mode(Mode.GUIDED.name)
 
                     if method == WaypointMissionMethod.guide_waypoint:
                         Mission = Message_ID.Waypoints
@@ -158,7 +160,6 @@ if __name__ == "__main__":
                         target = info[2]
                         target[2] = np.round(UAV.local_pose[2]) if target[2] == 0 else target[2]
                         completed = False
-                        
 
                     elif method == WaypointMissionMethod.guide_waypoints:
                         Mission = Message_ID.Waypoints
@@ -177,12 +178,6 @@ if __name__ == "__main__":
                         completed = False
                         pre_error = None
                         height = np.round(UAV.local_pose[2])
-                        ' Processs for fixed-wing UAV '
-                        if UAV.frame_type == FrameType.Fixed_wing:
-                            for i in range(5):
-                                UAV.position_control(CRPF.path[0][0], CRPF.path[0][1], height)
-                            if not UAV.mode == Mode.GUIDED.name:
-                                success = UAV.set_mode(Mode.GUIDED.name)
 
                 elif messageType == Message_ID.SEAD_mission:
                     height = np.round(UAV.local_pose[2])
@@ -199,6 +194,8 @@ if __name__ == "__main__":
                     UAV.Rmin = info[4][2]
                     waypoint_radius = info[-1]
                     taskAllocationProcess.start()
+                    if not UAV.mode == Mode.GUIDED.name:
+                        success = UAV.set_mode(Mode.GUIDED.name)
                 
                 elif messageType == Message_ID.Mission_Abort:
                     Mission = Message_ID.Mission_Abort
@@ -210,7 +207,9 @@ if __name__ == "__main__":
         if new_timer.check_timer(u2g_interval, previous_u2g_time):  
             previous_u2g_time = t()
             try:
-                send_packet = data.pack_u2g_packet_default(Mission, UAV.frame_type, UAV.mode, UAV.armed, UAV.battery_perc, new_timer.t(), UAV.local_pose, UAV.heading, np.linalg.norm(UAV.local_velo))
+                send_packet = data.pack_u2g_packet_default(Mission, UAV.frame_type, UAV.mode, UAV.armed, UAV.battery_perc, 
+                                                           new_timer.t(), UAV.local_pose, UAV.roll, UAV.pitch, UAV.yaw, 
+                                                           np.linalg.norm(UAV.local_velo))
                 xbee.send_data_async(gcs_address, send_packet)
             except:
                 pass
@@ -242,11 +241,11 @@ if __name__ == "__main__":
                 
                 elif method == WaypointMissionMethod.CraigReynolds_Path_Following:
                     if CRPF.method == pathFollowingMethod.path_following_position:
-                        desirePoint, index, _ = CRPF.get_desirePoint(UAV.v, UAV.local_pose[0], UAV.local_pose[1], UAV.heading*pi/180)
+                        desirePoint, index, _ = CRPF.get_desirePoint(UAV.v, UAV.local_pose[0], UAV.local_pose[1], UAV.yaw)
                         UAV.guide_to_waypoint([desirePoint[0], desirePoint[1], CRPF.path[index][-1]])
 
                     elif CRPF.method == pathFollowingMethod.path_following_position_yaw:
-                        desirePoint, index, _ = CRPF.get_desirePoint(UAV.v, UAV.local_pose[0], UAV.local_pose[1], UAV.heading*pi/180)
+                        desirePoint, index, _ = CRPF.get_desirePoint(UAV.v, UAV.local_pose[0], UAV.local_pose[1], UAV.yaw)
                         UAV.guide_to_waypoint([desirePoint[0], desirePoint[1], CRPF.path[index][-1]], arctan2(desirePoint[1] - UAV.local_pose[1], desirePoint[0] - UAV.local_pose[0])) 
 
                     elif CRPF.method == pathFollowingMethod.path_following_velocityLocal:
@@ -257,8 +256,8 @@ if __name__ == "__main__":
 
                     elif CRPF.method == pathFollowingMethod.dubinsPath_following_velocityBody_PID:
                         if UAV.frame_type == FrameType.Quad:
-                            desirePoint, index, _, error_of_distance = CRPF.get_desirePoint_withWindow(UAV.v, UAV.local_pose[0], UAV.local_pose[1], UAV.heading*pi/180, index)
-                            u, pre_error = CRPF.PID_control(UAV.v, UAV.Rmin, UAV.local_pose, UAV.heading*pi/180, desirePoint, pre_error)
+                            desirePoint, index, _, error_of_distance = CRPF.get_desirePoint_withWindow(UAV.v, UAV.local_pose[0], UAV.local_pose[1], UAV.yaw, index)
+                            u, pre_error = CRPF.PID_control(UAV.v, UAV.Rmin, UAV.local_pose, UAV.yaw, desirePoint, pre_error)
                             if error_of_distance <= 0 and completed:
                                 target_V, u = 0, 0
                             else:
@@ -266,7 +265,7 @@ if __name__ == "__main__":
                             v_z = 0.3 * (height - UAV.local_pose[2])  # altitude hold
                             UAV.velocity_bodyFrame_control(target_V, u, v_z)
                         elif UAV.frame_type == FrameType.Fixed_wing:
-                            desirePoint, index, _, error_of_distance = CRPF.get_desirePoint_withWindow(UAV.v, UAV.local_pose[0], UAV.local_pose[1], UAV.heading*pi/180, index)
+                            desirePoint, index, _, error_of_distance = CRPF.get_desirePoint_withWindow(UAV.v, UAV.local_pose[0], UAV.local_pose[1], UAV.yaw, index)
                             if error_of_distance <= 0 and completed:
                                 UAV.set_mode(Mode.LOITER.name)
                             else:

@@ -43,9 +43,9 @@ class UAV_Simulator(object):
         self.base = base
         self.sencing_range = 50
         self.frame_type = frame_type
-        ' Altitude and position of UAV  '
+        ' Altitude and position of UAV '
         self.local_pose = [initial_position[0], initial_position[1], 10]
-        self.heading = initial_position[2]*180/np.pi
+        self.yaw = initial_position[2]
         self.local_velo = [0, 0, 0]
         self.yaw_rate = 0
         ' Information for GCS '
@@ -61,9 +61,9 @@ class UAV_Simulator(object):
                 [ theta(k+1) ]   [ theta(k) + utheta x dt     ]
                 [ v(k+1)     ]   [ v(k) + us x dt             ]
         '''     
-        self.local_pose[0] += self.local_velo[0] * np.cos(self.heading*np.pi/180) * dt
-        self.local_pose[1] += self.local_velo[0] * np.sin(self.heading*np.pi/180) * dt
-        self.heading = pf.PlusMinusPi(self.heading*np.pi/180 + self.yaw_rate * dt)*180/np.pi
+        self.local_pose[0] += self.local_velo[0] * np.cos(self.yaw) * dt
+        self.local_pose[1] += self.local_velo[0] * np.sin(self.yaw) * dt
+        self.yaw = pf.PlusMinusPi(self.yaw + self.yaw_rate * dt)
         self.local_velo[0] += 2 * (v_cmd - self.local_velo[0]) * dt
         self.yaw_rate = self.yaw_rate + 5 * (yaw_cmd - self.yaw_rate) * dt
 
@@ -140,7 +140,7 @@ class main_process(object):
         if new_timer.check_timer(self.T, self.previous_time_u2u, -0.1) and not self.back_to_base:
             self.previous_time_u2u = time.time()
             self.packet, self.pos = comm_info.pack_SEAD_packet(uav_ros.type, uav_ros.v, uav_ros.Rmin, 
-                                                                  [uav_ros.local_pose[0], uav_ros.local_pose[1], uav_ros.heading*np.pi/180], 
+                                                                  [uav_ros.local_pose[0], uav_ros.local_pose[1], uav_ros.yaw], 
                                                                   self.base, self.task_locking, 1/self.fitness, self.best_solution, 
                                                                   self.terminated_tasks, self.new_targets)
             # for agent in self.u2u:
@@ -209,7 +209,7 @@ class main_process(object):
                     Steering Control (10 Hz)
             '''
             if new_timer.check_period(0.1, self.previous_time_control):
-                desirePoint, self.intial_windowIndex, _, error_of_distance = self.path_following.get_desirePoint_withWindow(uav_ros.v, uav_ros.local_pose[0], uav_ros.local_pose[1], uav_ros.heading*np.pi/180, self.intial_windowIndex)
+                desirePoint, self.intial_windowIndex, _, error_of_distance = self.path_following.get_desirePoint_withWindow(uav_ros.v, uav_ros.local_pose[0], uav_ros.local_pose[1], uav_ros.yaw, self.intial_windowIndex)
                 if error_of_distance <= 0 and self.back_to_base:
                     ' Stop when arriving at the base '
                     target_V, u = 0, 0
@@ -217,10 +217,10 @@ class main_process(object):
                     ' Decrease the velocity when approching the base => (P control)'
                     pid_velo = 0.8 * np.linalg.norm([self.base[0] - uav_ros.local_pose[0], self.base[1] - uav_ros.local_pose[1]])
                     target_V = pid_velo if pid_velo < uav_ros.v else uav_ros.v
-                    u, self.pre_error = self.path_following.PID_control(uav_ros.v, uav_ros.Rmin, uav_ros.local_pose, uav_ros.heading*np.pi/180, desirePoint, self.pre_error)
+                    u, self.pre_error = self.path_following.PID_control(uav_ros.v, uav_ros.Rmin, uav_ros.local_pose, uav_ros.yaw, desirePoint, self.pre_error)
                 else:
                     ' Vx(Body frame) and Yaw rate comands => (PD control)'
-                    u, self.pre_error = self.path_following.PID_control(uav_ros.v, uav_ros.Rmin, uav_ros.local_pose, uav_ros.heading*np.pi/180, desirePoint, self.pre_error)
+                    u, self.pre_error = self.path_following.PID_control(uav_ros.v, uav_ros.Rmin, uav_ros.local_pose, uav_ros.yaw, desirePoint, self.pre_error)
                     target_V = uav_ros.v
                 ' Altitude hold => (P control)'
                 v_z = 0.3 * (height - uav_ros.local_pose[2])
@@ -241,7 +241,7 @@ class main_process(object):
         if new_timer.check_timer(self.T, self.previous_time_u2u, -0.1) and not self.back_to_base:
             self.previous_time_u2u = time.time()
             self.packet, self.pos = comm_info.pack_SEAD_packet(uav_ros.type, uav_ros.v, uav_ros.Rmin, 
-                                                                  [uav_ros.local_pose[0], uav_ros.local_pose[1], uav_ros.heading*np.pi/180], 
+                                                                  [uav_ros.local_pose[0], uav_ros.local_pose[1], uav_ros.yaw], 
                                                                   self.base, self.task_locking, 1/self.fitness, self.best_solution, 
                                                                   self.terminated_tasks, self.new_targets)
             # for agent in self.u2u:
@@ -289,7 +289,7 @@ class main_process(object):
                     self.back_to_base = True
             
             if new_timer.check_period(0.1, self.previous_time_control):
-                desirePoint, self.intial_windowIndex, _, error_of_distance = self.path_following.get_desirePoint_withWindow(uav_ros.v, uav_ros.local_pose[0], uav_ros.local_pose[1], uav_ros.heading*np.pi/180, self.intial_windowIndex)
+                desirePoint, self.intial_windowIndex, _, error_of_distance = self.path_following.get_desirePoint_withWindow(uav_ros.v, uav_ros.local_pose[0], uav_ros.local_pose[1], uav_ros.yaw, self.intial_windowIndex)
                 if error_of_distance <= 0 and self.back_to_base:
                     uav_ros.set_mode(Mode.LOITER.name)
                 else:
@@ -309,7 +309,7 @@ class main_process(object):
         if new_timer.check_timer(self.T, self.previous_time_u2u, -0.1) and not self.back_to_base:
             self.previous_time_u2u = time.time()
             self.packet, self.pos = comm_info.pack_SEAD_packet(uav_ros.type, uav_ros.v, uav_ros.Rmin, 
-                                                                [uav_ros.local_pose[0], uav_ros.local_pose[1], uav_ros.heading*np.pi/180], 
+                                                                [uav_ros.local_pose[0], uav_ros.local_pose[1], uav_ros.yaw], 
                                                                 self.base, self.task_locking, 1/self.fitness, self.best_solution, 
                                                                 self.terminated_tasks, self.new_targets)
             # for agent in self.u2u:
@@ -357,8 +357,8 @@ class main_process(object):
                     self.back_to_base = True
             
             if new_timer.check_period(0.1, self.previous_time_control):
-                desirePoint, self.intial_windowIndex, _, error_of_distance = self.path_following.get_desirePoint_withWindow(uav_ros.v, uav_ros.local_pose[0], uav_ros.local_pose[1], uav_ros.heading*np.pi/180, self.intial_windowIndex)
-                u, self.pre_error = self.path_following.PID_control(uav_ros.v, uav_ros.Rmin, uav_ros.local_pose, uav_ros.heading*np.pi/180, desirePoint, self.pre_error)
+                desirePoint, self.intial_windowIndex, _, error_of_distance = self.path_following.get_desirePoint_withWindow(uav_ros.v, uav_ros.local_pose[0], uav_ros.local_pose[1], uav_ros.yaw, self.intial_windowIndex)
+                u, self.pre_error = self.path_following.PID_control(uav_ros.v, uav_ros.Rmin, uav_ros.local_pose, uav_ros.yaw, desirePoint, self.pre_error)
                 if error_of_distance <= 0 and self.back_to_base:
                     target_V, u = 0, 0
                 elif self.back_to_base:

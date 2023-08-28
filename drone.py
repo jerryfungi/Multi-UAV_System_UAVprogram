@@ -26,7 +26,6 @@ class Drone(object):
         self.mode = None
         self.local_pose, self.local_velo = [0, 0, 0], [0, 0, 0]
         self.gps_pose_lla = [0, 0, 0]
-        self.heading = 0
         self.roll, self.pitch, self.yaw = 0, 0, 0
         self.battery_volt, self.battery_perc = 0, 0
         self.home = [0, 0, 0]
@@ -76,15 +75,10 @@ class Drone(object):
         e, n, u = pm.ecef2enu(x, y, z, self.origin[0], self.origin[1], 0)
         self.local_pose = [e, n, u_h]
         self.local_velo = [msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z]      
-
-    def heading_callback(self, msg):
-        ''' NED [0, 360] to ENU [+180, -180]'''
-        self.heading = 90 - msg.data if msg.data < 270 else 470 - msg.data
     
     def imu_callback(self, msg):
         self.imu_msg = msg
         self.roll, self.pitch, self.yaw = self.euler_from_quaternion(msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w)
-        self.heading = self.yaw*180/pi
 
     def euler_from_quaternion(self, x, y, z, w):
         """
@@ -217,8 +211,9 @@ class Drone(object):
     def iteration(self, event):
         print('LLA: ', self.gps_pose_lla)
         print("local/pose:", self.local_pose, self.local_velo)
-        print("heading:", self.heading)
         print("yaw angle:", self.yaw, self.yaw*180/pi)
+        print("roll angle:", self.roll, self.roll*180/pi)
+        print("pitch angle:", self.pitch, self.pitch*180/pi)
         # print(self.position_cmd.coordinate_frame, PositionTarget.FRAME_LOCAL_NED)
         print("....................................")
         print("bat:", self.battery_perc)

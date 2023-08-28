@@ -14,13 +14,13 @@ class packet_processing(object):
         self.uavs_info = [[] for _ in range(10)] # 10 info
         self.task_locking = []
       
-    def pack_u2g_packet_default(self, mission, frameType, mode, armed, battery, timestamp, position, heading, speed):
+    def pack_u2g_packet_default(self, mission, frameType, mode, armed, battery, timestamp, position, roll, pitch, yaw, speed):
         if type(mission) == Message_ID:
             msg_id = mission.value
         else:
             msg_id = 0
-        return pack('<BBBBBBqiiiii', msg_id, self.uav_id, frameType.value, Mode[f"{mode}"].value, int(armed), int(battery), int(timestamp*1e6), 
-                    int(position[0]*1e3), int(position[1]*1e3), int(position[2]*1e3), int(heading*1e3), int(speed*1e3))
+        return pack('<BBBBBBdiiiiiii', msg_id, self.uav_id, frameType.value, Mode[f"{mode}"].value, int(armed), int(battery), timestamp, 
+                    int(position[0]*1e3), int(position[1]*1e3), int(position[2]*1e3), int(roll*1e6), int(pitch*1e6), int(yaw*1e6), int(speed*1e3))
 
     def pack_info_packet(self, statement):
         string_bytes = statement.encode()
@@ -29,7 +29,7 @@ class packet_processing(object):
 
     def pack_record_time_packet(self, statement, time):
         string_bytes = statement.encode()
-        packet = pack('<BBqB', Message_ID.Record_Time.value, self.uav_id, int(time*1e6), len(string_bytes))
+        packet = pack('<BBdB', Message_ID.Record_Time.value, self.uav_id, time, len(string_bytes))
         return packet + string_bytes
     
     def pack_SEAD_packet(self, uav_type, uav_velocity, uav_Rmin, UAV_pos, base_config, fix, cost, chromosome, tasks_completed, taregts_found):
