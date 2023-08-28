@@ -207,6 +207,7 @@ class Drone(object):
         self.v_body_cmd.velocity.z = Vz if Vz else 0
         self.v_body_cmd.yaw_rate = yaw_rate  # +-180
         self.setpoint_pub.publish(self.v_body_cmd)
+        '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'
 
     def iteration(self, event):
         print('LLA: ', self.gps_pose_lla)
